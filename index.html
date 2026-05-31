@@ -32,7 +32,7 @@
             background: #1a1a1a;
             border-radius: 12px;
             padding: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             text-align: right;
             min-height: 80px;
             display: flex;
@@ -53,6 +53,38 @@
             font-size: 36px;
             font-weight: bold;
             min-height: 44px;
+        }
+
+        .history {
+            background: #1a1a1a;
+            border-radius: 12px;
+            padding: 8px 20px;
+            margin-bottom: 15px;
+            max-height: 72px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: #4a4a4a transparent;
+        }
+
+        .history::-webkit-scrollbar {
+            width: 4px;
+        }
+
+        .history::-webkit-scrollbar-thumb {
+            background: #4a4a4a;
+            border-radius: 4px;
+        }
+
+        .history-item {
+            color: #666;
+            font-size: 13px;
+            text-align: right;
+            padding: 2px 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
         }
 
         .buttons {
@@ -133,18 +165,53 @@
         .zero {
             grid-column: span 2;
         }
+
+        .unary {
+            background: #3498db;
+            color: #fff;
+        }
+
+        .unary:hover {
+            background: #2980b9;
+        }
+
+        .memory-btn {
+            background: #9b59b6;
+            color: #fff;
+            font-size: 12px;
+            padding: 10px;
+        }
+
+        .memory-btn:hover {
+            background: #8e44ad;
+        }
+
+        .memory-indicator {
+            color: #9b59b6;
+            font-size: 12px;
+            text-align: left;
+            min-height: 18px;
+            padding: 2px 0;
+        }
     </style>
 </head>
 <body>
     <div class="calculator">
         <div class="display">
+            <div class="memory-indicator" id="memoryIndicator"></div>
             <div class="expression" id="expression"></div>
             <div class="result" id="result">0</div>
         </div>
+        <div class="history" id="history"></div>
         <div class="buttons">
+            <button class="memory-btn" onclick="memoryClear()">MC</button>
+            <button class="memory-btn" onclick="memoryRecall()">MR</button>
+            <button class="memory-btn" onclick="memoryAdd()">M+</button>
+            <button class="memory-btn" onclick="memorySubtract()">M−</button>
+
             <button class="clear" onclick="clearAll()">C</button>
             <button class="backspace" onclick="backspace()">⌫</button>
-            <button class="operator" onclick="appendOperator('%')">%</button>
+            <button class="unary" onclick="toggleSign()">±</button>
             <button class="operator" onclick="appendOperator('/')">÷</button>
 
             <button class="number" onclick="appendNumber('7')">7</button>
@@ -172,13 +239,31 @@
         let expression = '';
         let result = '0';
         let shouldResetResult = false;
+        let memory = null;
+        let historyEntries = [];
+        const MAX_HISTORY = 5;
 
         const expressionEl = document.getElementById('expression');
         const resultEl = document.getElementById('result');
+        const historyEl = document.getElementById('history');
+        const memoryIndicator = document.getElementById('memoryIndicator');
 
         function updateDisplay() {
             expressionEl.textContent = expression;
             resultEl.textContent = result;
+            memoryIndicator.textContent = memory !== null ? 'M' : '';
+        }
+
+        function addHistory(entry) {
+            historyEntries.unshift(entry);
+            if (historyEntries.length > MAX_HISTORY) historyEntries.pop();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            historyEl.innerHTML = historyEntries.map(e =>
+                `<div class="history-item">${e}</div>`
+            ).join('');
         }
 
         function appendNumber(num) {
@@ -210,6 +295,16 @@
             }
             if (!result.includes('.')) {
                 result += '.';
+            }
+            updateDisplay();
+        }
+
+        function toggleSign() {
+            if (result === '0') return;
+            if (result.startsWith('-')) {
+                result = result.slice(1);
+            } else {
+                result = '-' + result;
             }
             updateDisplay();
         }
@@ -249,7 +344,12 @@
                     return;
             }
 
-            result = Number.isInteger(calcResult) ? calcResult.toString() : calcResult.toFixed(6).replace(/\.?0+$/, '');
+            const formattedResult = Number.isInteger(calcResult) ? calcResult.toString() : calcResult.toFixed(6).replace(/\.?0+$/, '');
+            const formattedA = Number.isInteger(a) ? a.toString() : a.toFixed(6).replace(/\.?0+$/, '');
+            const formattedB = Number.isInteger(b) ? b.toString() : b.toFixed(6).replace(/\.?0+$/, '');
+            addHistory(`${formattedA} ${op} ${formattedB} = ${formattedResult}`);
+
+            result = formattedResult;
             expression = '';
             shouldResetResult = true;
             updateDisplay();
@@ -270,6 +370,67 @@
             }
             updateDisplay();
         }
+
+        // Memory functions
+        function memoryClear() {
+            memory = null;
+            updateDisplay();
+        }
+
+        function memoryRecall() {
+            if (memory !== null) {
+                if (shouldResetResult) {
+                    shouldResetResult = false;
+                }
+                result = memory.toString();
+                updateDisplay();
+            }
+        }
+
+        function memoryAdd() {
+            const val = parseFloat(result);
+            if (!isNaN(val)) {
+                memory = (memory || 0) + val;
+                shouldResetResult = true;
+                updateDisplay();
+            }
+        }
+
+        function memorySubtract() {
+            const val = parseFloat(result);
+            if (!isNaN(val)) {
+                memory = (memory || 0) - val;
+                shouldResetResult = true;
+                updateDisplay();
+            }
+        }
+
+        // Keyboard support
+        document.addEventListener('keydown', (e) => {
+            if (e.key >= '0' && e.key <= '9') {
+                appendNumber(e.key);
+            } else if (e.key === '.') {
+                appendDecimal();
+            } else if (e.key === '+' || e.key === '-') {
+                appendOperator(e.key);
+            } else if (e.key === '*') {
+                appendOperator('*');
+            } else if (e.key === '/') {
+                e.preventDefault();
+                appendOperator('/');
+            } else if (e.key === '%') {
+                appendOperator('%');
+            } else if (e.key === 'Enter' || e.key === '=') {
+                e.preventDefault();
+                calculate();
+            } else if (e.key === 'Backspace') {
+                backspace();
+            } else if (e.key === 'Escape' || e.key === 'c' || e.key === 'C') {
+                clearAll();
+            }
+        });
+
+        updateDisplay();
     </script>
 </body>
 </html>
